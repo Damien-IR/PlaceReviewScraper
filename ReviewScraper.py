@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import re
 
 import aiohttp
@@ -32,11 +33,17 @@ class ReviewScraper:
         self.blog_multi_space_pattern = re.compile("\s{2,}")
         self.bookingId_extract_pattern = re.compile("\"bookingBusinessId\":\"(?P<bookingBusinessId>\d+)\"")
 
+        self.booking_path = ''
+        self.blog_path = ''
+        self.receipt_path = ''
+
     async def fetch(self, url):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as res:
-                assert res.status == 200
-                return await res.text()
+                if res.status == 200:
+                    return await res.text()
+                else:
+                    return None
 
     def get_max_loop_count(self, total, per_page):
         return int(math.ceil(total / per_page))
@@ -56,15 +63,14 @@ class ReviewScraper:
             # 정규 표현식으로 추출
             matched_group = self.bookingId_extract_pattern.search(response)
             # bookingBusinessId가 존재하는 경우
-            if type(matched_group) is not None:
+            if matched_group is not None:
                 # 정규표현식 그룹으로 추출
                 bookingBusinessId = matched_group.group("bookingBusinessId")
                 self.bookingBusinessId = bookingBusinessId
                 # 반환
                 return bookingBusinessId
-        # 문제가 발생시 None 반환
-        else:
-            return None
+
+    # 문제가 발생시 None 반환
 
     # 블로그, 카페 글들을 조회하는 메서드.
     # businessId를 기준으로 조회할 수 있다.
@@ -81,10 +87,11 @@ class ReviewScraper:
                       + self.str_display_for_url \
                       + str(self.num_blog_display_per_page)
         response = await self.fetch(request_url)
-        # Response가 제대로 온 경우
         if response is not None:
+            # Response가 제대로 온 경우
             # json으로 변환
             json_response = json.loads(response)
+            json_response['businessId'] = businessId
             try:
                 num_max_item_count = int(json_response['maxItemCount'])
             except KeyError:
@@ -138,7 +145,6 @@ class ReviewScraper:
                     else:
                         item["subText"] = tmp_blog_text
             return json_response
-
         else:
             return None
 
@@ -158,10 +164,8 @@ class ReviewScraper:
 
         if response is not None:
             json_response = json.loads(response)
-            try:
-                num_total_count = int(json_response['total'])
-            except KeyError:
-                return None
+            json_response['businessId'] = businessId
+            num_total_count = int(json_response['total'])
             if num_total_count == 0:
                 return None
             elif num_total_count > self.num_receipt_display_per_page:
@@ -174,9 +178,8 @@ class ReviewScraper:
                               + self.str_display_for_url \
                               + str(self.num_receipt_display_per_page)
                     tmp_response = await self.fetch(tmp_url)
-                    if tmp_response is not None:
-                        tmp_json_response = json.loads(tmp_response)
-                        json_response['items'] += tmp_json_response['items']
+                    tmp_json_response = json.loads(tmp_response)
+                    json_response['items'] += tmp_json_response['items']
             return json_response
         else:
             return None
@@ -197,6 +200,8 @@ class ReviewScraper:
 
         if response is not None:
             json_response = json.loads(response)
+            json_response['bookingBusinessId'] = bookingBusinessId
+            json_response['businessId'] = self.businessId
             try:
                 num_selected_total_count = int(json_response['selectedTotal'])
             except KeyError:
@@ -217,3 +222,38 @@ class ReviewScraper:
             return json_response
         else:
             return None
+
+    def change_business_id(self, businessId):
+        self.businessId = businessId
+
+    def change_booking_business_id(self, bookingBusinessId):
+        self.bookingBusinessId = bookingBusinessId
+
+    async def get_all_by_business_id(self, businessId):
+        if not os.path.isdir("bookingReviews"):
+            os.makedirs("bookingReviews")
+        if not os.path.isdir("blogReviews"):
+            os.makedirs("blogReviews")
+        if not os.path.isdir("receiptReviews"):
+            os.makedirs("receiptReviews")
+
+        self.booking_path = "bookingReviews/" + str(businessId) + ".json"
+        self.blog_path = "blogReviews/" + str(businessId) + ".json"
+        self.receipt_path = "receiptReviews/" + str(businessId) + ".json"
+
+        self.change_business_id(businessId)
+        bookingBusinessId = await self.get_booking_business_id(businessId)
+        self.change_booking_business_id(bookingBusinessId)
+        booking_reviews = await self.get_booking_reviews(bookingBusinessId)
+        blog_reviews = await self.get_blog_reviews(businessId)
+        receipt_reviews = await self.get_receipt_reviews(businessId)
+
+        await save_json_file(booking_reviews, self.booking_path)
+        await save_json_file(blog_reviews, self.blog_path)
+        await save_json_file(receipt_reviews, self.receipt_path)
+
+
+async def save_json_file(json_data, file_loc, encoding="utf-8", mode='w+'):
+    file = open(file_loc, encoding=encoding, mode=mode)
+    file.write(json.dumps(json_data, ensure_ascii=False))
+    file.close()
