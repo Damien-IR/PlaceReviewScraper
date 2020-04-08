@@ -37,6 +37,12 @@ class ReviewScraper:
         self.blog_path = ''
         self.receipt_path = ''
 
+        self.folders = ['bookingReviews', 'blogReviews', 'receiptReviews']
+
+        for i in self.folders:
+            if not os.path.isdir(i):
+                os.makedirs(i)
+
     async def fetch(self, url):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as res:
@@ -230,13 +236,6 @@ class ReviewScraper:
         self.bookingBusinessId = bookingBusinessId
 
     async def get_all_by_business_id(self, businessId):
-        if not os.path.isdir("bookingReviews"):
-            os.makedirs("bookingReviews")
-        if not os.path.isdir("blogReviews"):
-            os.makedirs("blogReviews")
-        if not os.path.isdir("receiptReviews"):
-            os.makedirs("receiptReviews")
-
         self.booking_path = "bookingReviews/" + str(businessId) + ".json"
         self.blog_path = "blogReviews/" + str(businessId) + ".json"
         self.receipt_path = "receiptReviews/" + str(businessId) + ".json"
