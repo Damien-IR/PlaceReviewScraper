@@ -2,6 +2,7 @@ import json
 import math
 import os
 import re
+import time
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -37,9 +38,10 @@ class ReviewScraper:
         self.blog_path = ''
         self.receipt_path = ''
 
+        # 리뷰들 저장할 폴더 생성.
         self.folders = ['bookingReviews', 'blogReviews', 'receiptReviews']
-
         for i in self.folders:
+            # 폴더가 있는지 확인.
             if not os.path.isdir(i):
                 os.makedirs(i)
 
@@ -48,6 +50,12 @@ class ReviewScraper:
             async with session.get(url) as res:
                 if res.status == 200:
                     return await res.text()
+                # 잘못된 ID 로 API 요청 시 (음식점이 없을 시) 일부 API 에서 500 코드 반환.
+                # 짧은 시간 내에 잘못된 요청 횟수가 약 5회 초과시 API에서 IP를 짧은 시간 동안 차단함. (반환 값이 없음)
+                # 레스토랑이 없는 경우 차단 우려가 있으므로, 일시적으로 크롤링을 중단함. (블로킹 방식 이용해야 함)
+                # 5 ~ 10초가 적당.
+                elif res.status == 500:
+                    time.sleep(10)
                 else:
                     return None
 
