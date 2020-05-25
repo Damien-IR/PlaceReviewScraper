@@ -8,6 +8,9 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 
+# Tested on python 3.7.5.
+
+
 class ReviewScraper:
     def __init__(self, business_id=0):
         # 예약자 리뷰 검색에 필요한 bookingBusinessId
@@ -262,5 +265,7 @@ class ReviewScraper:
 
 async def save_json_file(json_data, file_loc, encoding="utf-8", mode='w+'):
     file = open(file_loc, encoding=encoding, mode=mode)
-    file.write(json.dumps(json_data, ensure_ascii=False))
+    string = json.dumps(json_data, ensure_ascii=False)
+    string = string.encode(encoding, 'surrogatepass').decode(encoding, 'replace')
+    file.write(string)
     file.close()
